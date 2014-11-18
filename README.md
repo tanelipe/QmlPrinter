@@ -5,6 +5,17 @@ Simple Qt component which allows user to print out a QML view from C++.
 
 Based on the work of Cyrille Berger (https://github.com/cyrilleberger/PrintML)
 
+Installation / Setup
+=========
+```
+Clone the repository:
+git clone https://github.com/tanelipe/QmlPrinter/
+
+Edit your projects .pro file to contain the following line
+
+include($$PWD/QmlPrinter/QmlPrinter.pri)
+```
+
 Examples
 ==========
 ```
