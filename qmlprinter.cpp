@@ -125,8 +125,7 @@ void QmlPrinter::paintQQuickRectangle(QQuickItem *item, QPainter *painter)
 
 void QmlPrinter::paintQQuickText(QQuickItem *item, QPainter *painter)
 {
-    const QRectF boundingRect = item->mapRectToScene(item->boundingRect());
-    QRectF rect = QRectF(boundingRect.left() - 5, boundingRect.top(), boundingRect.width() + 10, boundingRect.height());
+    const QRectF rect = item->mapRectToScene(item->boundingRect());
     const QFont font = item->property("font").value<QFont>();
     const QString text = item->property("text").value<QString>();
     const QColor color = item->property("color").value<QColor>();
