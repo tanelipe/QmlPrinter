@@ -20,6 +20,9 @@ QmlPrinter::~QmlPrinter()
 
 void QmlPrinter::printPDF(const QString &location, QQuickItem *item, bool showPDF)
 {
+    if(!item)
+        return;
+
     QPrinter printer;
     printer.setOutputFormat(QPrinter::PdfFormat);
     printer.setOutputFileName(location);
@@ -29,6 +32,10 @@ void QmlPrinter::printPDF(const QString &location, QQuickItem *item, bool showPD
     else
         printer.setOrientation(QPrinter::Portrait);
     printer.setPaperSize(QPrinter::A4);
+
+    // Resizes the root object to the resolution that the printer uses for printable area
+    item->setProperty("width", printer.pageRect().width());
+    item->setProperty("height", printer.pageRect().height());
 
     QPainter painter;
     painter.begin(&printer);
