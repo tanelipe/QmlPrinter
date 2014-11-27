@@ -23,6 +23,8 @@ class QmlPrinter : public QObject
     Q_OBJECT
 private:
 
+    QList<QString> printableItems;
+
     void paintItem(QQuickItem *item, QQuickWindow *window, QPainter *painter);
     void paintQQuickRectangle(QQuickItem *item, QPainter *painter);
     void paintQQuickText(QQuickItem *item, QPainter *painter);
@@ -30,12 +32,14 @@ private:
     void paintQQuickCanvasItem(QQuickItem *item, QQuickWindow *window, QPainter *painter);
 
     bool inherits(const QMetaObject *metaObject, const QString &name);
+    bool isCustomPrintItem(const QString &item);
 public:
     explicit QmlPrinter(QObject *parent = 0);
     virtual ~QmlPrinter();
 
     void printPDF(const QString &location, QQuickItem *item, bool showPDF = false);
 
+    void addPrintableItem(const QString &item);
 signals:
 
 public slots:

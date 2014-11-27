@@ -52,7 +52,18 @@ void QmlPrinter::paintItem(QQuickItem *item, QQuickWindow *window, QPainter *pai
     if(!item || !item->isVisible())
         return;
 
-    if(item->flags().testFlag(QQuickItem::ItemHasContents)) {
+    if(isCustomPrintItem(item->metaObject()->className())) {
+        painter->save();
+        if(item->clip()) {
+            painter->setClipping(true);
+            painter->setClipRect(item->clipRect());
+        }
+        const QRectF rect = item->mapRectToScene(item->boundingRect());
+
+        QImage image = window->grabWindow();
+        painter->drawImage(rect.x(), rect.y(), image, rect.x(), rect.y(), rect.width(), rect.height());
+        painter->restore();
+    } else if(item->flags().testFlag(QQuickItem::ItemHasContents)) {
         painter->save();
         if(item->clip()) {
             painter->setClipping(true);
@@ -77,7 +88,6 @@ void QmlPrinter::paintItem(QQuickItem *item, QQuickWindow *window, QPainter *pai
         }
         painter->restore();
     }
-
     const QObjectList children = item->children();
     foreach(QObject *obj, children) {
         paintItem(qobject_cast<QQuickItem*>(obj), window, painter);
@@ -290,6 +300,22 @@ bool QmlPrinter::inherits(const QMetaObject *metaObject, const QString &name)
         return true;
     } else if(metaObject->superClass()) {
         return inherits(metaObject->superClass(), name);
+    }
+    return false;
+}
+
+void QmlPrinter::addPrintableItem(const QString &item)
+{
+    printableItems.push_back(item);
+}
+
+bool QmlPrinter::isCustomPrintItem(const QString &item)
+{
+    QListIterator<QString> it(printableItems);
+    while(it.hasNext()) {
+        QString printableItem = it.next();
+        if(item.contains(printableItem))
+            return true;
     }
     return false;
 }
