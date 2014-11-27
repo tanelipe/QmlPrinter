@@ -52,6 +52,7 @@ void QmlPrinter::paintItem(QQuickItem *item, QQuickWindow *window, QPainter *pai
     if(!item || !item->isVisible())
         return;
 
+    bool drawChildren = true;
     if(isCustomPrintItem(item->metaObject()->className())) {
         painter->save();
         if(item->clip()) {
@@ -63,6 +64,7 @@ void QmlPrinter::paintItem(QQuickItem *item, QQuickWindow *window, QPainter *pai
         QImage image = window->grabWindow();
         painter->drawImage(rect.x(), rect.y(), image, rect.x(), rect.y(), rect.width(), rect.height());
         painter->restore();
+        drawChildren = false;
     } else if(item->flags().testFlag(QQuickItem::ItemHasContents)) {
         painter->save();
         if(item->clip()) {
@@ -85,12 +87,15 @@ void QmlPrinter::paintItem(QQuickItem *item, QQuickWindow *window, QPainter *pai
 
                 painter->drawImage(rect, image, QRect(rect.x(), rect.y(), rect.width(), rect.height()));
             }
+            drawChildren = false;
         }
         painter->restore();
     }
-    const QObjectList children = item->children();
-    foreach(QObject *obj, children) {
-        paintItem(qobject_cast<QQuickItem*>(obj), window, painter);
+    if(drawChildren) {
+        const QObjectList children = item->children();
+        foreach(QObject *obj, children) {
+            paintItem(qobject_cast<QQuickItem*>(obj), window, painter);
+        }
     }
 }
 
