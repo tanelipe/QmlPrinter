@@ -45,7 +45,7 @@
 #include <QTextLayout>
 #include <QDebug>
 #include <qmath.h>
-#include "StyledText.h"
+#include "styledtext.h"
 #include <QQmlContext>
 
 /*
@@ -422,6 +422,8 @@ bool StyledTextPrivate::parseTag(const QChar *&ch, const QString &textIn, QStrin
                         break;
                     case Square:
                         textOut += square;
+                        break;
+                    default:
                         break;
                     }
                     textOut += QString(2, QChar::Nbsp);

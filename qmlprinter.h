@@ -18,6 +18,7 @@
 #include <QAbstractTextDocumentLayout>
 #include <QTextDocument>
 #include "styledtext.h"
+#include <QPrinterInfo>
 class QmlPrinter : public QObject
 {
     Q_OBJECT
@@ -38,7 +39,7 @@ public:
     virtual ~QmlPrinter();
 
     void printPDF(const QString &location, QQuickItem *item, bool showPDF = false);
-
+    void print(const QPrinterInfo& info, QQuickItem *item);
     void addPrintableItem(const QString &item);
 signals:
 

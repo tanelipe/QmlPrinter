@@ -47,6 +47,38 @@ void QmlPrinter::printPDF(const QString &location, QQuickItem *item, bool showPD
     }
 }
 
+void QmlPrinter::print(const QPrinterInfo& info, QQuickItem *item)
+{
+    if(!item)
+        return;
+
+    QPrinter printer(info);
+    printer.setFullPage(true);
+
+    if(item->width() > item->height())
+        printer.setOrientation(QPrinter::Landscape);
+    else
+        printer.setOrientation(QPrinter::Portrait);
+
+    // By default we will get the printers paper size, don't force to A4.
+    //printer.setPaperSize(QPrinter::A4);
+
+    // Resizes the root object to the resolution that the printer uses for printable area
+    int width = printer.pageRect().width();
+    int height = printer.pageRect().height();
+
+    width -= (printer.pageLayout().margins().right() * 2);
+    height -= (printer.pageLayout().margins().bottom() * 2);
+
+    item->setProperty("width", width);
+    item->setProperty("height", height);
+
+    QPainter painter;
+    painter.begin(&printer);
+    paintItem(item, item->window(), &painter);
+    painter.end();
+}
+
 void QmlPrinter::paintItem(QQuickItem *item, QQuickWindow *window, QPainter *painter)
 {
     if(!item || !item->isVisible())
@@ -59,8 +91,15 @@ void QmlPrinter::paintItem(QQuickItem *item, QQuickWindow *window, QPainter *pai
             painter->setClipping(true);
             painter->setClipRect(item->clipRect());
         }
-        const QRectF rect = item->mapRectToScene(item->boundingRect());
 
+        const int boundingMargin = 5;
+        QRectF boundingRect;
+        boundingRect.setTop(item->boundingRect().top() - boundingMargin);
+        boundingRect.setLeft(item->boundingRect().left() - boundingMargin);
+        boundingRect.setHeight(item->boundingRect().height() + boundingMargin * 2);
+        boundingRect.setWidth(item->boundingRect().width() + boundingMargin * 2);
+
+        const QRectF rect = item->mapRectToScene(boundingRect);
         QImage image = window->grabWindow();
         painter->drawImage(rect.x(), rect.y(), image, rect.x(), rect.y(), rect.width(), rect.height());
         painter->restore();
@@ -151,7 +190,7 @@ void QmlPrinter::paintQQuickText(QQuickItem *item, QPainter *painter)
 
     QTextOption textOption;
     textOption.setWrapMode(QTextOption::WrapMode(wrapMode));
-    textOption.setAlignment((Qt::Alignment)(horizontalAlignment | verticalAlignment));
+    textOption.setAlignment(static_cast<Qt::Alignment>(horizontalAlignment | verticalAlignment));
 
 
 
@@ -177,8 +216,8 @@ void QmlPrinter::paintQQuickText(QQuickItem *item, QPainter *painter)
                 painter->setMatrixEnabled(true);
 
                 double PI = 3.14159265358979323846;
-                double cosine = cos((double)item->rotation() * PI / 180.0);
-                double sine = sin((double)item->rotation() * PI / 180.0);
+                double cosine = cos(static_cast<double>(item->rotation()) * PI / 180.0);
+                double sine = sin(static_cast<double>(item->rotation()) * PI / 180.0);
 
                 textRect = QRectF(-abs(sine) * rect.height() * 0.5,
                                   abs(cosine) * rect.width() * 0.5,
@@ -270,7 +309,7 @@ void QmlPrinter::paintQQuickImage(QQuickItem *item, QPainter *painter)
 
     QImage image(url.toLocalFile());
 
-    QRect rect = item->mapRectToScene(item->boundingRect()).toRect(); // TODO should it be set on the QPainter ?
+    QRect rect = item->mapRectToScene(item->boundingRect()).toRect();
     QRect sourceRect(0, 0, image.width(), image.height());
 
     switch(fillMode)
