@@ -34,12 +34,14 @@ private:
 
     bool inherits(const QMetaObject *metaObject, const QString &name);
     bool isCustomPrintItem(const QString &item);
+
+    void changePrinterOrientation(QPrinter& printer, const int& width, const int& height);
 public:
     explicit QmlPrinter(QObject *parent = 0);
     virtual ~QmlPrinter();
 
-    void printPDF(const QString &location, QQuickItem *item, bool showPDF = false);
-    void print(const QPrinterInfo& info, QQuickItem *item);
+    bool printPDF(const QString &location, QList<QQuickItem *> items, bool showPDF = false);
+    bool print(const QPrinterInfo& info, QList<QQuickItem*> items);
     void addPrintableItem(const QString &item);
 signals:
 

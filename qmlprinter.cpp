@@ -8,6 +8,8 @@
 
 #include "qmlprinter.h"
 
+#include <QGraphicsView>
+
 QmlPrinter::QmlPrinter(QObject *parent) :
     QObject(parent)
 {
@@ -18,65 +20,106 @@ QmlPrinter::~QmlPrinter()
 
 }
 
-void QmlPrinter::printPDF(const QString &location, QQuickItem *item, bool showPDF)
+void QmlPrinter::changePrinterOrientation(QPrinter& printer, const int &width, const int &height)
 {
-    if(!item)
-        return;
+    if(width > height)
+        printer.setOrientation(QPrinter::Landscape);
+    else
+        printer.setOrientation(QPrinter::Portrait);
+}
 
+bool QmlPrinter::printPDF(const QString &location, QList<QQuickItem*> items, bool showPDF)
+{
+    if(items.length() == 0) {
+        return false;
+    }
     QPrinter printer;
     printer.setOutputFormat(QPrinter::PdfFormat);
     printer.setOutputFileName(location);
     printer.setFullPage(true);
-    if(item->width() > item->height())
-        printer.setOrientation(QPrinter::Landscape);
-    else
-        printer.setOrientation(QPrinter::Portrait);
-    printer.setPaperSize(QPrinter::A4);
 
-    // Resizes the root object to the resolution that the printer uses for printable area
-    item->setProperty("width", printer.pageRect().width());
-    item->setProperty("height", printer.pageRect().height());
+    // Change the printer orientation based on the first page
+    // This needs to be called before the painting is started as it will only take effect
+    // after newPage is called (painter.begin() calls this method)
+    changePrinterOrientation(printer, items.at(0)->width(), items.at(0)->height());
 
     QPainter painter;
-    painter.begin(&printer);
-    paintItem(item, item->window(), &painter);
-    painter.end();
+    // It's possible to fail here for example if the file location does not allow writing
+    if(!painter.begin(&printer)) {
+        return false;
+    }
 
+    for(int i = 0; i < items.length(); ++i) {
+        QQuickItem *pageObject = items.at(i);
+        // Change the page width/height to match what the printer gives us
+        // This way all the components will be resized accordingly
+        pageObject->setProperty("width", printer.pageRect().width());
+        pageObject->setProperty("height", printer.pageRect().height());
+
+        paintItem(pageObject, pageObject->window(), &painter);
+
+        // We need to lookahead so we can setup the printer orientation for the next
+        // item and add a new page to the printer
+        int next = i + 1;
+        if(next < items.length()) {
+            changePrinterOrientation(printer, items.at(next)->width(), items.at(next)->height());
+            printer.newPage();
+        }
+    }
+
+    painter.end();
     if(showPDF) {
         QDesktopServices::openUrl(QUrl("file:///" + location));
     }
+    return true;
 }
 
-void QmlPrinter::print(const QPrinterInfo& info, QQuickItem *item)
+bool QmlPrinter::print(const QPrinterInfo& info, QList<QQuickItem *> items)
 {
-    if(!item)
-        return;
+    if(items.length() == 0)
+        return false;
 
     QPrinter printer(info);
-    printer.setFullPage(true);
+    //printer.setFullPage(true);
 
-    if(item->width() > item->height())
-        printer.setOrientation(QPrinter::Landscape);
-    else
-        printer.setOrientation(QPrinter::Portrait);
-
-    // By default we will get the printers paper size, don't force to A4.
-    //printer.setPaperSize(QPrinter::A4);
-
-    // Resizes the root object to the resolution that the printer uses for printable area
-    int width = printer.pageRect().width();
-    int height = printer.pageRect().height();
-
-    width -= (printer.pageLayout().margins().right() * 2);
-    height -= (printer.pageLayout().margins().bottom() * 2);
-
-    item->setProperty("width", width);
-    item->setProperty("height", height);
+    // Change the printer orientation based on the first page
+    // This needs to be called before the painting is started as it will only take effect
+    // after newPage is called (painter.begin() calls this method)
+    changePrinterOrientation(printer, items.at(0)->width(), items.at(0)->height());
 
     QPainter painter;
-    painter.begin(&printer);
-    paintItem(item, item->window(), &painter);
+
+    if(!painter.begin(&printer)) {
+        return false;
+    }
+    for(int i = 0; i < items.length(); ++i) {
+        QQuickItem *pageObject = items.at(i);
+
+        // Change the page width/height to match what the printer gives us
+        // This way all the components will be resized accordingly
+
+        int width = printer.pageRect().width();
+        int height = printer.pageRect().height();
+
+        /*
+        width -= (printer.pageLayout().margins().right() * 2);
+        height -= (printer.pageLayout().margins().bottom() * 2);*/
+
+        pageObject->setProperty("width", width);
+        pageObject->setProperty("height", height);
+
+        paintItem(pageObject, pageObject->window(), &painter);
+
+        // We need to lookahead so we can setup the printer orientation for the next
+        // item and add a new page to the printer
+        int next = i + 1;
+        if(next < items.length()) {
+            changePrinterOrientation(printer, items.at(next)->width(), items.at(next)->height());
+            printer.newPage();
+        }
+    }
     painter.end();
+    return true;
 }
 
 void QmlPrinter::paintItem(QQuickItem *item, QQuickWindow *window, QPainter *painter)
@@ -85,7 +128,24 @@ void QmlPrinter::paintItem(QQuickItem *item, QQuickWindow *window, QPainter *pai
         return;
 
     bool drawChildren = true;
-    if(isCustomPrintItem(item->metaObject()->className())) {
+
+    // This is a bit special case as we need to use childItems instead of children
+    if(inherits(item->metaObject(), "QQuickListView")) {
+        drawChildren = false;
+        QList<QQuickItem*> childItems = item->childItems();
+        if(childItems.length() > 0) {
+            // First item is the QML ListView
+            QQuickItem *listView = childItems.at(0);
+            if(listView != nullptr) {
+                // Draw the child items of the QML ListView
+                QList<QQuickItem*> listViewChildren = listView->childItems();
+                foreach(QQuickItem *children, listViewChildren) {
+                    paintItem(children, window, painter);
+                }
+            }
+        }
+    }
+    else if(isCustomPrintItem(item->metaObject()->className())) {
         painter->save();
         if(item->clip()) {
             painter->setClipping(true);
@@ -160,8 +220,10 @@ void QmlPrinter::paintQQuickRectangle(QQuickItem *item, QPainter *painter)
     const qreal border_width = border->property("width").value<qreal>();
     const QColor border_color = border->property("color").value<QColor>();
     const qreal radius = item->property("radius").value<qreal>();
+    const qreal opacity = item->property("opacity").value<qreal>();
 
     painter->setBrush(color);
+    painter->setOpacity(opacity);
 
     if(border_width > 0 and not (border_width == 1 and border_color == QColor(Qt::black))) {
         painter->setPen(QPen(border_color, border_width));
@@ -188,11 +250,14 @@ void QmlPrinter::paintQQuickText(QQuickItem *item, QPainter *painter)
     const int horizontalAlignment = item->property("horizontalAlignment").value<int>();
     const int verticalAlignment   = item->property("verticalAlignment").value<int>();
 
+    const int elide = item->property("elide").value<int>();
+    Qt::TextElideMode elideMode = static_cast<Qt::TextElideMode>(elide);
+
     QTextOption textOption;
     textOption.setWrapMode(QTextOption::WrapMode(wrapMode));
     textOption.setAlignment(static_cast<Qt::Alignment>(horizontalAlignment | verticalAlignment));
 
-
+    QFontMetrics fm(font);
 
     if(textFormat == Qt::AutoText) {
         textFormat = Qt::mightBeRichText(text) ? 4 : Qt::PlainText;
@@ -204,6 +269,7 @@ void QmlPrinter::paintQQuickText(QQuickItem *item, QPainter *painter)
             painter->setPen(color);
 
             QRectF textRect = rect;
+
             if(item->rotation() != 0) {
                 int xc = rect.x() + rect.width() / 2;
                 int yc = rect.y() + rect.height() / 2;
@@ -233,21 +299,37 @@ void QmlPrinter::paintQQuickText(QQuickItem *item, QPainter *painter)
             QList<StyledTextImgTag*> tags;
             StyledText::parse(text, textLayout, tags, QUrl(), qmlContext(item), true, &fontModified, defaultFormat);
 
-            textLayout.beginLayout();
-            int height = 0;
-            const int leading = 0;
-            while (true) {
-                QTextLine line = textLayout.createLine();
-                if (!line.isValid())
-                    break;
-
-                line.setLineWidth(item->width());
-                height += leading;
-                line.setPosition(QPointF(0, height));
-                height += line.height();
+            QString elidedText = textLayout.text();
+            if(elideMode != Qt::ElideNone) {
+                elidedText = fm.elidedText(elidedText, elideMode, item->width());
+                textLayout.setText(elidedText);
             }
-            textLayout.endLayout();
 
+            textLayout.beginLayout();
+
+            switch(textOption.wrapMode()) {
+            case QTextOption::NoWrap:
+                textLayout.createLine();
+                break;
+            case QTextOption::WordWrap:
+            case QTextOption::ManualWrap:
+            case QTextOption::WrapAnywhere:
+            case QTextOption::WrapAtWordBoundaryOrAnywhere: {
+                int height = 0;
+                forever {
+                    QTextLine line = textLayout.createLine();
+                    if(!line.isValid())
+                        break;
+                    line.setLineWidth(item->width());
+                    line.setPosition(QPointF(0, height));
+                    height += line.height();
+                }
+            } break;
+            default:
+                break;
+            }
+
+            textLayout.endLayout();
             textLayout.draw(painter, textRect.topLeft());
 
         } break;
@@ -283,19 +365,38 @@ void QmlPrinter::paintQQuickText(QQuickItem *item, QPainter *painter)
             textLayout.draw(painter, rect.topLeft());
         } break;
         case Qt::RichText: {
-            QTextDocument doc;
-            doc.setTextWidth(rect.width());
-            doc.setDefaultTextOption(textOption);
-            doc.setDefaultFont(font);
+            QRectF textRect = rect;
+            if(item->rotation() != 0) {
+                int xc = rect.x() + rect.width() / 2;
+                int yc = rect.y() + rect.height() / 2;
 
-            doc.setHtml(text);
+                QMatrix matrix;
+                matrix.translate(xc, yc);
+                matrix.rotate(item->rotation());
+
+                painter->setMatrix(matrix);
+                painter->setMatrixEnabled(true);
+
+                double PI = 3.14159265358979323846;
+                double cosine = cos(static_cast<double>(item->rotation()) * PI / 180.0);
+                double sine = sin(static_cast<double>(item->rotation()) * PI / 180.0);
+
+                textRect = QRectF(-abs(sine) * rect.height() * 0.5,
+                                  abs(cosine) * rect.width() * 0.5,
+                                  rect.height(), rect.width());
+            }
+
+            QTextDocument document;
+            document.setTextWidth(textRect.width());
+            document.setDefaultTextOption(textOption);
+            document.setDefaultFont(font);
+            document.setHtml(text);
 
             QAbstractTextDocumentLayout::PaintContext context;
-
             context.palette.setColor(QPalette::Text, color);
 
-            QAbstractTextDocumentLayout *layout = doc.documentLayout();
-            painter->translate(rect.topLeft());
+            QAbstractTextDocumentLayout *layout = document.documentLayout();
+            painter->translate(textRect.topLeft());
             painter->setRenderHint(QPainter::Antialiasing, true);
             layout->draw(painter, context);
         } break;
